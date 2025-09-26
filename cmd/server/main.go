@@ -20,9 +20,10 @@ func main() {
 	defer conn.Close()
 	fmt.Println("Connected to RabbitMQ")
 
-	ch, err := conn.Channel()
+	key := fmt.Sprintf("%s.*", routing.GameLogSlug)
+	ch, _, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, key, pubsub.QueueDurable)
 	if err != nil {
-		fmt.Println("Failed to open a channel:", err)
+		fmt.Printf("Failed to declare and bind queue: %v\n", err)
 		return
 	}
 	defer ch.Close()
