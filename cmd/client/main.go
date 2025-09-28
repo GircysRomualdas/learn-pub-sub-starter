@@ -28,14 +28,13 @@ func main() {
 	}
 
 	queueName := fmt.Sprintf("%s.%s", routing.PauseKey, username)
-	ch, _, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.QueueTransient)
+	gameState := gamelogic.NewGameState(username)
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.QueueTransient, handlerPause(gameState))
 	if err != nil {
-		fmt.Printf("Failed to declare and bind queue: %v\n", err)
+		fmt.Printf("Failed to subscribe to queue: %v\n", err)
 		return
 	}
-	defer ch.Close()
 
-	gameState := gamelogic.NewGameState(username)
 	for {
 		input := gamelogic.GetInput()
 		if len(input) == 0 {
@@ -72,4 +71,11 @@ func main() {
 		}
 	}
 
+}
+
+func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
+	return func(ps routing.PlayingState) {
+		defer fmt.Print("> ")
+		gs.HandlePause(ps)
+	}
 }
