@@ -27,13 +27,29 @@ func main() {
 		return
 	}
 
-	queueName := fmt.Sprintf("%s.%s", routing.PauseKey, username)
+	queuePauseName := fmt.Sprintf("%s.%s", routing.PauseKey, username)
 	gameState := gamelogic.NewGameState(username)
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.QueueTransient, handlerPause(gameState))
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, queuePauseName, routing.PauseKey, pubsub.QueueTransient, handlerPause(gameState))
 	if err != nil {
-		fmt.Printf("Failed to subscribe to queue: %v\n", err)
+		fmt.Printf("Failed to subscribe to pause queue: %v\n", err)
 		return
 	}
+
+	moveKey := fmt.Sprintf("%s.*", routing.ArmyMovesPrefix)
+	queueMoveName := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username)
+	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, queueMoveName, moveKey, pubsub.QueueTransient, handlerMove(gameState))
+	if err != nil {
+		fmt.Printf("Failed to subscribe to move queue: %v\n", err)
+		return
+	}
+
+	key := fmt.Sprintf("%s.*", routing.GameLogSlug)
+	ch, _, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, key, pubsub.QueueDurable)
+	if err != nil {
+		fmt.Printf("Failed to declare and bind queue: %v\n", err)
+		return
+	}
+	defer ch.Close()
 
 	for {
 		input := gamelogic.GetInput()
@@ -57,6 +73,11 @@ func main() {
 				fmt.Printf("No units to move\n")
 				continue
 			}
+			if err := pubsub.PublishJSON(ch, routing.ExchangePerilTopic, queueMoveName, armyMove); err != nil {
+				fmt.Println("publish error:", err)
+				continue
+			}
+			fmt.Println("Move was published")
 		case "status":
 			gameState.CommandStatus()
 		case "help":
@@ -77,5 +98,13 @@ func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
 	return func(ps routing.PlayingState) {
 		defer fmt.Print("> ")
 		gs.HandlePause(ps)
+	}
+}
+
+func handlerMove(gs *gamelogic.GameState) func(move gamelogic.ArmyMove) {
+	return func(move gamelogic.ArmyMove) {
+		defer fmt.Print("> ")
+		outcome := gs.HandleMove(move)
+		fmt.Println("Detected move:", outcome)
 	}
 }
