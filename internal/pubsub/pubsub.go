@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -50,7 +52,11 @@ func DeclareAndBind(
 	isDurable := queueType == QueueDurable
 	isTransient := queueType == QueueTransient
 
-	queue, err := ch.QueueDeclare(queueName, isDurable, isTransient, isTransient, false, nil)
+	args := amqp.Table{
+		"x-dead-letter-exchange": routing.ExchangePerilDLX,
+	}
+
+	queue, err := ch.QueueDeclare(queueName, isDurable, isTransient, isTransient, false, args)
 	if err != nil {
 		return nil, amqp.Queue{}, fmt.Errorf("Failed to declare queue: %v", err)
 	}
