@@ -127,9 +127,9 @@ func handlerMove(gs *gamelogic.GameState, publishCh *amqp.Channel) func(move gam
 			}
 			if err := pubsub.PublishJSON(publishCh, routing.ExchangePerilTopic, key, warMessage); err != nil {
 				fmt.Printf("Failed to publish war message: %v\n", err)
-				return pubsub.NackDiscard
+				return pubsub.NackRequeue
 			}
-			return pubsub.NackRequeue
+			return pubsub.Ack
 		default:
 			return pubsub.NackDiscard
 		}
