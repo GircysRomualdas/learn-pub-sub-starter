@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -14,19 +15,21 @@ func main() {
 	connStr := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(connStr)
 	if err != nil {
-		fmt.Println("Failed to connect to RabbitMQ:", err)
-		return
+		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
 	defer conn.Close()
 	fmt.Println("Connected to RabbitMQ")
 
-	key := fmt.Sprintf("%s.*", routing.GameLogSlug)
-	ch, _, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, key, pubsub.QueueDurable)
+	ch, err := conn.Channel()
 	if err != nil {
-		fmt.Printf("Failed to declare and bind queue: %v\n", err)
-		return
+		log.Fatalf("Failed to create channel: %v", err)
 	}
 	defer ch.Close()
+
+	logKey := fmt.Sprintf("%s.*", routing.GameLogSlug)
+	if err = pubsub.SubscribeGob(conn, routing.ExchangePerilTopic, routing.GameLogSlug, logKey, pubsub.QueueDurable, handlerLog()); err != nil {
+		log.Fatalf("Failed to subscribe to log queue: %v", err)
+	}
 
 	gamelogic.PrintServerHelp()
 	for {

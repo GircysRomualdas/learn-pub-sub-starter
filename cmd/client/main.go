@@ -1,7 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"log"
+	"strconv"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -14,48 +18,37 @@ func main() {
 	connStr := "amqp://guest:guest@localhost:5672/"
 	conn, err := amqp.Dial(connStr)
 	if err != nil {
-		fmt.Printf("Failed to connect to RabbitMQ: %v\n", err)
-		return
+		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
 	defer conn.Close()
 
 	fmt.Println("Connected to RabbitMQ")
 
-	username, err := gamelogic.ClientWelcome()
+	publishCh, err := conn.Channel()
 	if err != nil {
-		fmt.Printf("Failed to welcome client: %v\n", err)
-		return
+		log.Fatalf("could not create channel: %v", err)
 	}
 
-	key := fmt.Sprintf("%s.*", routing.GameLogSlug)
-	publishCh, _, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, key, pubsub.QueueDurable)
+	username, err := gamelogic.ClientWelcome()
 	if err != nil {
-		fmt.Printf("Failed to declare and bind queue: %v\n", err)
-		return
+		log.Fatalf("Failed to welcome client: %v", err)
 	}
-	defer publishCh.Close()
 
 	queuePauseName := fmt.Sprintf("%s.%s", routing.PauseKey, username)
 	gameState := gamelogic.NewGameState(username)
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, queuePauseName, routing.PauseKey, pubsub.QueueTransient, handlerPause(gameState))
-	if err != nil {
-		fmt.Printf("Failed to subscribe to pause queue: %v\n", err)
-		return
+	if err = pubsub.SubscribeJSON(conn, routing.ExchangePerilDirect, queuePauseName, routing.PauseKey, pubsub.QueueTransient, handlerPause(gameState)); err != nil {
+		log.Fatalf("Failed to subscribe to pause queue: %v", err)
 	}
 
 	moveKey := fmt.Sprintf("%s.*", routing.ArmyMovesPrefix)
 	queueMoveName := fmt.Sprintf("%s.%s", routing.ArmyMovesPrefix, username)
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, queueMoveName, moveKey, pubsub.QueueTransient, handlerMove(gameState, publishCh))
-	if err != nil {
-		fmt.Printf("Failed to subscribe to move queue: %v\n", err)
-		return
+	if err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, queueMoveName, moveKey, pubsub.QueueTransient, handlerMove(gameState, publishCh)); err != nil {
+		log.Fatalf("Failed to subscribe to move queue: %v", err)
 	}
 
 	warKey := fmt.Sprintf("%s.*", routing.WarRecognitionsPrefix)
-	err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, "war", warKey, pubsub.QueueDurable, handlerWar(gameState, publishCh))
-	if err != nil {
-		fmt.Printf("Failed to subscribe to war queue: %v\n", err)
-		return
+	if err = pubsub.SubscribeJSON(conn, routing.ExchangePerilTopic, routing.WarRecognitionsPrefix, warKey, pubsub.QueueDurable, handlerWar(gameState, publishCh)); err != nil {
+		log.Fatalf("Failed to subscribe to war queue: %v", err)
 	}
 
 	for {
@@ -90,7 +83,12 @@ func main() {
 		case "help":
 			gamelogic.PrintClientHelp()
 		case "spam":
-			fmt.Println("Spamming not allowed yet!")
+			fmt.Println("Start spamming")
+			if err := spam(publishCh, input, username); err != nil {
+				fmt.Printf("Spam error: %v\n", err)
+				continue
+			}
+			fmt.Println("Finished spamming")
 		case "quit":
 			gamelogic.PrintQuit()
 			return
@@ -99,4 +97,42 @@ func main() {
 		}
 	}
 
+}
+
+func publishGameLog(publishCh *amqp.Channel, username, msg string) error {
+	return pubsub.PublishGob(
+		publishCh,
+		routing.ExchangePerilTopic,
+		fmt.Sprintf("%s.%s", routing.GameLogSlug, username),
+		routing.GameLog{
+			Username:    username,
+			CurrentTime: time.Now(),
+			Message:     msg,
+		},
+	)
+}
+
+func spam(publishCh *amqp.Channel, words []string, username string) error {
+	if len(words) != 2 {
+		return errors.New("Usage: spam <number>")
+	}
+	num, err := strconv.Atoi(words[1])
+	if err != nil {
+		return fmt.Errorf("Error: %s is not a valid number", words[1])
+	}
+
+	for i := 0; i < num; i++ {
+		msg := gamelogic.GetMaliciousLog()
+		gamelog := routing.GameLog{
+			Username:    username,
+			CurrentTime: time.Now(),
+			Message:     msg,
+		}
+		key := fmt.Sprintf("%s.%s", routing.GameLogSlug, username)
+		if err := pubsub.PublishGob(publishCh, routing.ExchangePerilTopic, key, gamelog); err != nil {
+			fmt.Println("publish error:", err)
+			return fmt.Errorf("Publish error: %v", err)
+		}
+	}
+	return nil
 }

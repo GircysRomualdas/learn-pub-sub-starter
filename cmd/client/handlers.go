@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -80,17 +79,4 @@ func handlerWar(gs *gamelogic.GameState, publishCh *amqp.Channel) func(gamelogic
 			return pubsub.NackDiscard
 		}
 	}
-}
-
-func publishGameLog(publishCh *amqp.Channel, username, msg string) error {
-	return pubsub.PublishGob(
-		publishCh,
-		routing.ExchangePerilTopic,
-		fmt.Sprintf("%s.%s", routing.GameLogSlug, username),
-		routing.GameLog{
-			Username:    username,
-			CurrentTime: time.Now(),
-			Message:     msg,
-		},
-	)
 }
