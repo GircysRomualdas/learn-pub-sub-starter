@@ -34,7 +34,9 @@ func subscribe[T any](conn *amqp.Connection, exchange, queueName, key string, qu
 	if err != nil {
 		return fmt.Errorf("Failed to declare and bind queue: %v", err)
 	}
-
+	if err := ch.Qos(10, 0, false); err != nil {
+		return fmt.Errorf("Failed to set QoS: %v", err)
+	}
 	deliveries, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("Failed to consume queue: %v", err)
