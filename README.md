@@ -1,4 +1,4 @@
-# Learn Pub/Sub Architecture in RabbitMQ
+# Learn Pub/Sub Architecture in RabbitMQ and Go
 
 Build large-scale asynchronous Pub/Sub architectures using RabbitMQ and Go.
 
