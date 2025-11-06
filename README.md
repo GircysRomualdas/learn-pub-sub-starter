@@ -1,3 +1,6 @@
-# learn-pub-sub-starter (Peril)
+# Learn Pub/Sub Architecture in RabbitMQ
 
-This is the starter code used in Boot.dev's [Learn Pub/Sub](https://learn.boot.dev/learn-pub-sub) course.
+Build large-scale asynchronous Pub/Sub architectures using RabbitMQ and Go.
+
+This is the starter code used in Boot.dev's [Learn Pub/Sub](https://www.boot.dev/courses/learn-pub-sub-rabbitmq-golang) course.
+
